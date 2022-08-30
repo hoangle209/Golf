@@ -1,1 +1,1 @@
-from DTW import DTW
+from .DTW import DTW
