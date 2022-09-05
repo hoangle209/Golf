@@ -45,21 +45,20 @@ class DTW():
         cummulative_matrix = np.empty(shape = (b, n, m))
         
         for k in range(b):
-          _x, _y = x[k], y[k] # shape d x n and d x m
-          cost = self.cost_func(_x, _y)
-          # print(cost)
-          for i in range(n):
-            for j in range(m):
-              if i == 0 and j == 0:
-                cummulative_matrix[k, i, j] = cost[i, j]
-              elif i == 0:
-                cummulative_matrix[k, i, j] = cost[i, j] + cummulative_matrix[k, i, j-1] 
-              elif j == 0:
-                cummulative_matrix[k, i, j] = cost[i, j] + cummulative_matrix[k, i-1, j]
-              else:
-                cummulative_matrix[k, i, j] = cost[i, j] + min(cummulative_matrix[k, i-1, j-1],
-                                                              cummulative_matrix[k, i-1, j],
-                                                              cummulative_matrix[k, i, j-1])
+            _x, _y = x[k], y[k] # shape d x n and d x m
+            cost = self.cost_func(_x, _y)
+            for i in range(n):
+                for j in range(m):
+                    if i == 0 and j == 0:
+                        cummulative_matrix[k, i, j] = cost[i, j]
+                    elif i == 0:
+                        cummulative_matrix[k, i, j] = cost[i, j] + cummulative_matrix[k, i, j-1] 
+                    elif j == 0:
+                        cummulative_matrix[k, i, j] = cost[i, j] + cummulative_matrix[k, i-1, j]
+                    else:
+                        cummulative_matrix[k, i, j] = cost[i, j] + min(cummulative_matrix[k, i-1, j-1],
+                                                                       cummulative_matrix[k, i-1, j],
+                                                                       cummulative_matrix[k, i, j-1])
         return cummulative_matrix
 
     def optimal_path(self, cummulative_matrix):
@@ -77,16 +76,16 @@ class DTW():
             matrix = cummulative_matrix[b, ...]
             while N>0 or M>0:
                 if N == 0:
-                  cell = (N, M-1)
+                    cell = (N, M-1)
                 elif M==0:
-                  cell = (N-1, M)
+                    cell = (N-1, M)
                 else:
-                  _min = min(matrix[N-1, M-1],
-                             matrix[N-1, M],
-                             matrix[N, M-1])
-                  if _min == matrix[N-1, M-1]: cell = (N-1, M-1)
-                  elif _min == matrix[N, M-1]: cell = (N, M-1)
-                  else: cell = (N-1, M)
+                    _min = min(matrix[N-1, M-1],
+                               matrix[N-1, M],
+                               matrix[N, M-1])
+                    if _min == matrix[N-1, M-1]: cell = (N-1, M-1)
+                    elif _min == matrix[N, M-1]: cell = (N, M-1)
+                    else: cell = (N-1, M)
                 p.append(cell)
                 N, M = cell
             p.reverse()
