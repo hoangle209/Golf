@@ -135,11 +135,11 @@ class DTW():
         a = angle if is_radian else angle / 180 * np.pi
         rotate_matrix = np.eye(3)
         if axis == 'Z':
-          y, x = ((0, 0, 1, 1), (0, 1, 0, 1))
+            y, x = ((0, 0, 1, 1), (0, 1, 0, 1))
         elif axis == 'Y':
-          y, x = ((0, 2, 0, 2), (0, 0, 2, 2))
+            y, x = ((0, 2, 0, 2), (0, 0, 2, 2))
         elif axis == 'X':
-          y, x = ((1, 1, 2, 2), (1, 2, 1, 2))
+            y, x = ((1, 1, 2, 2), (1, 2, 1, 2))
 
         rotate_matrix[y, x] = np.cos(a), -np.sin(a), np.sin(a), np.cos(a)
         new = rotate_matrix.dot(in_matrix.T)
