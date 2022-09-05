@@ -208,8 +208,31 @@ class DTW():
     def compare(self):
         raise NotImplementedError
 
-    def scoring(self):
-        raise NotImplementedError
+    def scoring(self, raw):
+        raw = 100 - raw / np.pi * 100
+        return raw
 
     def __call__(self):
-        raise NotImplementedError
+        '''
+            Run
+            batch: time series for 'series' or nums of states for '1v1'
+            nums joints: number of keypoint used, 17
+            3: [x ,y, z]
+            :param gt, batch x 17 x 3
+            :param pred, batch x 17 x 3
+            :param _type
+            :param allignment
+            :param reduction
+        '''
+        assert _type in ['series', '1v1']
+        assert allignment in ['rotate', 'allign']
+        assert reduction in [None, 'mean']
+
+        if _type == '1v1':
+            raw = self.compare_1_1(gt, pred, _type = allignment)
+            if reduction == 'mean':
+            raw = raw.mean(axis = 1)
+        else:
+            raise NotImplementedError 
+          
+        return self.scoring(raw)
