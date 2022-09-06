@@ -3,6 +3,7 @@ import math
 import numba
 import json
 from tqdm import tqdm 
+from collections import defaultdict
 
 class DTW():
     def __init__(self, method = 'cosin'):
@@ -164,9 +165,22 @@ class DTW():
 
         pair = [(0, 1), (0, 4), (1, 2), (2, 3), (4, 5), (5, 6), (7, 0), (8, 7), 
                 (8, 14), (14, 15), (15, 16), (8, 11), (11 ,12), (12, 13), (9, 8), (10, 9)]
+
+        part_pair_dict = {'right hand': [(8, 11), (11, 12), (12, 13)],
+                          'left hand': [(8, 14), (14, 15), (16, 17)],
+                          'right leg': [(0, 1), (1, 2), (2, 3)],
+                          'left leg': [(0, 4), (4, 5), (5, 6)],
+                          'spine': [(10, 9), (9, 8), (8, 7), (7,0)]
+                    }
+
         vec = [_vec(matrix, i, j) for (i, j) in pair] # shape of one element: batch x 1 x 3
         vec = np.concatenate(vec, axis = 1)
-        return vec
+        
+        part_vec = {}
+        part_vec.update({key:np.concatenate(list(map(lambda x: _vec(matrix, x[0], x[1]), part_pair_dict[key])), axis = 1) \
+                         for key in part_pair_dict.keys()})
+
+        return vec, part_vec
 
     def compare_1_1(self, gt, pred, allignment = 'rotate'):
         '''
@@ -180,12 +194,12 @@ class DTW():
         b = gt.shape[0]
         if allignment == 'rotate': 
             pa = []
-            _gt = self.point_to_vec(gt) # shape 8 x 16 x 3
+            _gt, _gt_dict = self.point_to_vec(gt) # shape 8 x 16 x 3
             for j in range(b):   
                 pb = []
                 for i in range(360):
                     _pred = self.euler_rotation(pred[j], i)
-                    _pred = self.point_to_vec(_pred[np.newaxis, ...]) # shape 8 x 16 x 3     
+                    _pred, _gt_dict = self.point_to_vec(_pred[np.newaxis, ...]) # shape 8 x 16 x 3     
                     GT = _gt[j] # 16 x 3 
                     PRED = _pred[0] # 16 x 3
                     mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
@@ -201,17 +215,20 @@ class DTW():
             return pa.min(axis = 1), pa.argmin(axis = 1) # b x 16
 
         elif allignment == 'allign':
-            pb = []
-            _gt = self.point_to_vec(self.allignment(gt))
-            _pred = self.point_to_vec(self.allignment(pred)) # shape batch x 16 x 3
-            pb = []
-            for j in range(b):
-                GT = _gt[j]
-                PRED = _pred[j] # 16 x 3
-                mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
-                cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (16, )
-                pb.append(np.arccos(cos))   
-            return np.array(pb)
+            _gt, _gt_dict = self.point_to_vec(self.allignment(gt))
+            _pred, _pred_dict = self.point_to_vec(self.allignment(pred)) # shape batch x 16 x 3
+            pb = defaultdict(int)
+            for key in _pred_dict:
+                for j in range(b):
+                    GT = _gt_dict[key][j]
+                    PRED = _pred_dict[key][j] # n x 3
+                    mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
+                    cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (n, )
+                    if pb[key] != 0:
+                        np.concatenate((np.arccos(cos)[np.newaxis, ...], pb[key]), axis = 0)
+                    else:
+                        pb[key] = np.arccos(cos)[np.newaxis, ...]
+            return pb
 
     def compare_DTW(self, gt, pred, allignment = 'allign', path_reduce = 'mean'):
         '''
@@ -259,7 +276,7 @@ class DTW():
           assert reduction in [None, 'mean']
 
           if _type == '1v1':
-              raw = self.compare_1_1(gt, pred, _type = allignment)
+              raw = self.compare_1_1(gt, pred, allignment)
           elif _type == 'series':
               raw = self.compare_DTW(gt, pred, allignment)
 
