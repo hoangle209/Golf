@@ -24,8 +24,8 @@ dtw = DTW()
 # # e_ = 100 - e_.mean(axis = 1) / np.pi * 100
 # print(f'point by rotation: {e} at {e_}')
 
-pose1 = np.array(a['6'])
-pose_rotate = dtw.euler_rotation(pose1[0],90, 'X')[np.newaxis, ...]
+pose1 = np.array(a['1'])
+pose_rotate = dtw.euler_rotation(pose1[0],280, 'Z')[np.newaxis, ...]
 
 # e = dtw.compare_1_1(pose_rotate, pose1, 'allign')
 # e = 100 - e.mean(axis = 1) / np.pi * 100                                                                 

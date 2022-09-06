@@ -72,26 +72,30 @@ class DTW():
         B, N, M = cummulative_matrix.shape
         N, M = N-1, M-1
         _P = []
+        _V = []
         for b in range(B):
             p = [(N, M)]
             matrix = cummulative_matrix[b, ...]
             while N>0 or M>0:
                 if N == 0:
-                  cell = (N, M-1)
+                    cell = (N, M-1)
                 elif M==0:
-                  cell = (N-1, M)
+                    cell = (N-1, M)
                 else:
-                  _min = min(matrix[N-1, M-1],
-                             matrix[N-1, M],
-                             matrix[N, M-1])
-                  if _min == matrix[N-1, M-1]: cell = (N-1, M-1)
-                  elif _min == matrix[N, M-1]: cell = (N, M-1)
-                  else: cell = (N-1, M)
+                    _min = min(matrix[N-1, M-1],
+                               matrix[N-1, M],
+                               matrix[N, M-1])
+                    if _min == matrix[N-1, M-1]: cell = (N-1, M-1)
+                    elif _min == matrix[N, M-1]: cell = (N, M-1)
+                    else: cell = (N-1, M)
                 p.append(cell)
                 N, M = cell
             p.reverse()
+            idx = list(zip(*p))
+            pvalue = cummulative_matrix[b, ...][idx]
             _P.append(p)
-        return _P
+            _V.append(pvalue)
+        return _P, _V
 
     def allignment(self, keypoint_batch):
         '''
@@ -164,9 +168,9 @@ class DTW():
         vec = np.concatenate(vec, axis = 1)
         return vec
 
-    def compare_1_1(self, gt, pred, _type = 'rotate'):
+    def compare_1_1(self, gt, pred, allignment = 'rotate'):
         '''
-        Compare 
+        Compare each state
           :param gt: nums_state x 17 x 3
           :param pred: nums_state x 17 x 3
           :param type: ['rotate', 'allign']
@@ -174,7 +178,7 @@ class DTW():
           :return points between each state
         '''
         b = gt.shape[0]
-        if _type == 'rotate': 
+        if allignment == 'rotate': 
             pa = []
             _gt = self.point_to_vec(gt) # shape 8 x 16 x 3
             for j in range(b):   
@@ -196,7 +200,7 @@ class DTW():
             # minimum value in axis 1 is corrsponding to 
             return pa.min(axis = 1), pa.argmin(axis = 1) # b x 16
 
-        elif _type == 'allign':
+        elif allignment == 'allign':
             pb = []
             _gt = self.point_to_vec(self.allignment(gt))
             _pred = self.point_to_vec(self.allignment(pred)) # shape batch x 16 x 3
@@ -209,9 +213,31 @@ class DTW():
                 pb.append(np.arccos(cos))   
             return np.array(pb)
 
-    def compare(self):
-        raise NotImplementedError
+    def compare_DTW(self, gt, pred, allignment = 'allign', path_reduce = 'mean'):
+        '''
+        Compare two time series
+        n, m: time series
+        num_states: 17
+        3: [x, y, z]
+          :param gt, n x num_joints x 3
+          :param pred, m x num_joints x 3
+          :param allignmen
+        '''
+        if allignment == 'rotate':
+            raise NotImplementedError
+        elif allignment == 'allign':
+            _gt = (self.point_to_vec(self.allignment(gt))).transpose(1, 0, 2)
+            _pred = (self.point_to_vec(self.allignment(pred))).transpose(1, 0, 2)
 
+            cum_mat = self.dtw(_gt, _pred) # shape num_joints x n x m
+            _, optim_points = self.optimal_path(cum_mat) # num_joints x (path of each num_joints: this may be 
+                                                         # different between each joint vec)
+                                                        
+            if path_reduce == 'mean':
+                _path_point = np.array(list(map(lambda x: x.mean(), optim_points)))
+            return _path_point
+
+            
     def scoring(self, raw):
         raw = 100 - raw / np.pi * 100
         return raw
@@ -234,9 +260,10 @@ class DTW():
 
           if _type == '1v1':
               raw = self.compare_1_1(gt, pred, _type = allignment)
-              if reduction == 'mean':
-                  raw = raw.mean(axis = 1)
-          else:
-              raise NotImplementedError 
-          
+          elif _type == 'series':
+              raw = self.compare_DTW(gt, pred, allignment)
+
+          if reduction == 'mean':
+              raw = raw.mean(axis = 1)
+                  
           return self.scoring(raw)
