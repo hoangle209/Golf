@@ -166,10 +166,10 @@ class DTW():
         pair = [(0, 1), (0, 4), (1, 2), (2, 3), (4, 5), (5, 6), (7, 0), (8, 7), 
                 (8, 14), (14, 15), (15, 16), (8, 11), (11 ,12), (12, 13), (9, 8), (10, 9)]
 
-        part_pair_dict = {'right hand': [(8, 11), (11, 12), (12, 13)],
-                          'left hand': [(8, 14), (14, 15), (16, 17)],
-                          'right leg': [(0, 1), (1, 2), (2, 3)],
-                          'left leg': [(0, 4), (4, 5), (5, 6)],
+        part_pair_dict = {'left hand': [(8, 11), (11, 12), (12, 13)],
+                          'right hand': [(8, 14), (14, 15), (16, 17)],
+                          'left leg': [(0, 1), (1, 2), (2, 3)],
+                          'right leg': [(0, 4), (4, 5), (5, 6)],
                           'spine': [(10, 9), (9, 8), (8, 7), (7,0)]
                     }
 
@@ -177,57 +177,65 @@ class DTW():
         vec = np.concatenate(vec, axis = 1)
         
         part_vec = {}
-        part_vec.update({key:np.concatenate(list(map(lambda x: _vec(matrix, x[0], x[1]), part_pair_dict[key])), axis = 1) \
-                         for key in part_pair_dict.keys()})
-
+        part_vec.update({key:np.concatenate(
+                                  list(map(lambda x: _vec(matrix, x[0], x[1]), part_pair_dict[key])), 
+                                  axis = 1) for key in part_pair_dict.keys()
+                        })
         return vec, part_vec
 
     def compare_1_1(self, gt, pred, allignment = 'rotate'):
         '''
         Compare each state
-          :param gt: nums_state x 17 x 3
-          :param pred: nums_state x 17 x 3
+        num_state: number of states used
+        17 keypoints
+        3: [x, y, z]
+          :param gt: 1 x 17 x 3
+          :param pred: 1 x 17 x 3
           :param type: ['rotate', 'allign']
 
           :return points between each state
         '''
         b = gt.shape[0]
         if allignment == 'rotate': 
-            pa = []
-            _gt, _gt_dict = self.point_to_vec(gt) # shape 8 x 16 x 3
-            for j in range(b):   
-                pb = []
-                for i in range(360):
-                    _pred = self.euler_rotation(pred[j], i)
-                    _pred, _gt_dict = self.point_to_vec(_pred[np.newaxis, ...]) # shape 8 x 16 x 3     
-                    GT = _gt[j] # 16 x 3 
-                    PRED = _pred[0] # 16 x 3
-                    mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
-                    cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (16, )
-                    try:
-                        pb.append(np.arccos(cos))
-                    except:
-                        print(cos)
-                pa.append(pb)
-            pa = np.array(pa) # b x 360 x 16
-            pa = pa.mean(axis = -1) # b x 360
-            # minimum value in axis 1 is corrsponding to 
-            return pa.min(axis = 1), pa.argmin(axis = 1) # b x 16
+            pa = {}
+            _gt, _gt_dict = self.point_to_vec(gt) # shape num_states (1) x 16 x 3
+            for key in _gt_dict:   
+                for j in range(b):
+                    pb = []
+                    _min = None
+                    for i in range(360):
+                        _pred = self.euler_rotation(pred[j], i)
+                        _pred, _pred_dict = self.point_to_vec(_pred[np.newaxis, ...]) # shape 1 x 16 x 3   
+                                                                                      # dict 5 parts 1 x num_vec x 3  
+                        GT = _gt_dict[key][j] # num_vecs x 3 
+                        PRED = _pred_dict[key][0] # num_vecs x 3
+                        mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
+                        cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (num_vecs, )
+                        tmp = np.mean(np.arccos(cos))
+                        if _min is None:
+                            _min, argmin = tmp, i
+                        else:
+                            if tmp < _min:
+                                _min, argmin = tmp, i
+                    pb.append(_min)           
+                pa[key] = np.array(pb)
+            return pa
 
         elif allignment == 'allign':
             _gt, _gt_dict = self.point_to_vec(self.allignment(gt))
             _pred, _pred_dict = self.point_to_vec(self.allignment(pred)) # shape batch x 16 x 3
+                                                                         # dict{5 part: b x num_vecs x 3}
             pb = defaultdict(int)
             for key in _pred_dict:
                 for j in range(b):
                     GT = _gt_dict[key][j]
-                    PRED = _pred_dict[key][j] # n x 3
+                    PRED = _pred_dict[key][j] # num_vecs x 3
                     mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
-                    cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (n, )
+                    cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (num_vecs, )
                     if pb[key] != 0:
                         np.concatenate((np.arccos(cos)[np.newaxis, ...], pb[key]), axis = 0)
                     else:
-                        pb[key] = np.arccos(cos)[np.newaxis, ...]
+                        pb[key] = np.arccos(cos)[np.newaxis, ...] # n x num_vecs
             return pb
 
     def compare_DTW(self, gt, pred, allignment = 'allign', path_reduce = 'mean'):
@@ -256,8 +264,12 @@ class DTW():
 
             
     def scoring(self, raw):
-        raw = 100 - raw / np.pi * 100
-        return raw
+        '''
+          :param raw: dict of part body vecs
+        '''
+        _raw = {}
+        _raw.update({key: 100 - raw[key].mean() / np.pi * 100 for key in raw})
+        return _raw
 
     def __call__(self, gt, pred, _type = '1v1', allignment = 'allign', reduction = 'mean'):
           '''
@@ -280,7 +292,7 @@ class DTW():
           elif _type == 'series':
               raw = self.compare_DTW(gt, pred, allignment)
 
-          if reduction == 'mean':
-              raw = raw.mean(axis = 1)
+          # if reduction == 'mean':
+          #     raw = raw.mean(axis = 1)
                   
           return self.scoring(raw)

@@ -15,16 +15,12 @@ pose2 = np.array(a['4'])
 
 dtw = DTW()
 
-e = dtw.compare_1_1(pose1, pose2, 'allign')
-# e = 100 - e.mean(axis = 1) / np.pi * 100                                                                 
-print('point by allignment: ', e)
+point = dtw(pose1, pose2, allignment = 'allign')
+print(f'point: {point}')
 
-# e, e_ = dtw.compare_1_1(pose1, pose2, 'rotate')
-# e = 100 - e / np.pi * 100
-# # e_ = 100 - e_.mean(axis = 1) / np.pi * 100
-# print(f'point by rotation: {e} at {e_}')
 
-pose1 = np.array(a['1'])
+
+# pose1 = np.array(a['1'])
 # pose_rotate = dtw.euler_rotation(pose1[0],280, 'Z')[np.newaxis, ...]
 
 # e = dtw.compare_1_1(pose_rotate, pose1, 'allign')
