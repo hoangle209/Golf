@@ -6,17 +6,21 @@ import numpy as np
 
 
 json_test_path = '/content/gdrive/MyDrive/test_golf/skeleton_test.json'
-
+# json_test_path = '/content/gdrive/MyDrive/golf_data/skeleton_perfect.json'
 with open(json_test_path, 'r') as f:
     a = json.load(f)
 
-pose1 = np.array(a['2'])
-pose2 = np.array(a['4'])
+# pose1 = np.array(a['8'])
+# pose2 = np.array(a['100'])
+
+pose1 = np.array(a['5'])
+pose2 = np.array(a['6'])
 
 dtw = DTW()
 
 point = dtw(pose1, pose2, allignment = 'allign')
-print(f'point: {point}')
+for k, v in point.items():
+  print(f'{k}: {v}')
 
 
 

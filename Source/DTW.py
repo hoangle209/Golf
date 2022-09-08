@@ -12,6 +12,7 @@ class DTW():
         self.cost_func = lambda x, y: self.cosin(x, y) \
               if self.method == 'cosin' else np.abs(x - y)
 
+
     def cosin(self, x, y):
         '''
         This funtion calculate angle between two vector
@@ -63,6 +64,7 @@ class DTW():
                                                                        cummulative_matrix[k, i, j-1])
         return cummulative_matrix
 
+
     def optimal_path(self, cummulative_matrix):
         '''
         This function will find an optimal path of a given DTW matrix
@@ -98,6 +100,7 @@ class DTW():
             _V.append(pvalue)
         return _P, _V
 
+
     def allignment(self, keypoint_batch):
         '''
         batch: number of states (or timeseries)
@@ -129,6 +132,7 @@ class DTW():
             new_batch[i] = proj(keypoint_batch[i])
         return new_batch
 
+
     def euler_rotation(self, in_matrix, angle, axis = 'Z', is_radian = False):
         '''
         This function will rotate a plane along its given orthogonal axis
@@ -149,6 +153,7 @@ class DTW():
         rotate_matrix[y, x] = np.cos(a), -np.sin(a), np.sin(a), np.cos(a)
         new = rotate_matrix.dot(in_matrix.T) # shape 3 x 17
         return new.T
+
 
     def point_to_vec(self, matrix):
         '''
@@ -183,6 +188,7 @@ class DTW():
                         })
         return vec, part_vec
 
+
     def compare_1_1(self, gt, pred, allignment = 'rotate'):
         '''
         Compare each state
@@ -198,10 +204,10 @@ class DTW():
         b = gt.shape[0]
         if allignment == 'rotate': 
             pa = {}
-            _gt, _gt_dict = self.point_to_vec(gt) # shape num_states (1) x 16 x 3
-            for key in _gt_dict:   
+            _gt, _gt_dict = self.point_to_vec(gt) # shape num_states x 16 x 3
+            for key in _gt_dict: 
+                pb = []  
                 for j in range(b):
-                    pb = []
                     _min = None
                     for i in range(360):
                         _pred = self.euler_rotation(pred[j], i)
@@ -218,7 +224,7 @@ class DTW():
                             if tmp < _min:
                                 _min, argmin = tmp, i
                     pb.append(_min)           
-                pa[key] = np.array(pb)
+                pa[key] = np.array(pb) # (b, )
             return pa
 
         elif allignment == 'allign':
@@ -232,11 +238,12 @@ class DTW():
                     PRED = _pred_dict[key][j] # num_vecs x 3
                     mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
                     cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (num_vecs, )
-                    if pb[key] != 0:
-                        np.concatenate((np.arccos(cos)[np.newaxis, ...], pb[key]), axis = 0)
+                    if isinstance(pb[key], np.ndarray):
+                        pb[key] = np.concatenate([(np.arccos(cos)).reshape(1, -1), pb[key]], axis = 0) # b x num_vecs
                     else:
-                        pb[key] = np.arccos(cos)[np.newaxis, ...] # n x num_vecs
+                        pb[key] = np.arccos(cos)[np.newaxis, ...] # 1 x num_vecs
             return pb
+
 
     def compare_DTW(self, gt, pred, allignment = 'allign', path_reduce = 'mean'):
         '''
@@ -268,8 +275,9 @@ class DTW():
           :param raw: dict of part body vecs
         '''
         _raw = {}
-        _raw.update({key: 100 - raw[key].mean() / np.pi * 100 for key in raw})
+        _raw.update({key: 100 - raw[key].mean(axis=-1) / np.pi * 100 for key in raw})
         return _raw
+
 
     def __call__(self, gt, pred, _type = '1v1', allignment = 'allign', reduction = 'mean'):
           '''
