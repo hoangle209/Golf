@@ -117,7 +117,7 @@ class DTW():
               :param projection: projection space
             '''
             transformation_matrix = np.eye(3) # shape 3 x 3
-            A, B, C = keypoints[0], keypoints[1], keypoints[4] # each has shape [3, ]
+            A, B, C = keypoints[0], keypoints[3], keypoints[6] # each has shape [3, ]
             AB, AC = B - A, C - A
             xAB, yAB = AB[0], AB[1]
             xAC, yAC = AC[0], AC[1]
@@ -171,11 +171,14 @@ class DTW():
         pair = [(0, 1), (0, 4), (1, 2), (2, 3), (4, 5), (5, 6), (7, 0), (8, 7), 
                 (8, 14), (14, 15), (15, 16), (8, 11), (11 ,12), (12, 13), (9, 8), (10, 9)]
 
-        part_pair_dict = {'left hand': [(8, 11), (11, 12), (12, 13)],
-                          'right hand': [(8, 14), (14, 15), (16, 17)],
-                          'left leg': [(0, 1), (1, 2), (2, 3)],
-                          'right leg': [(0, 4), (4, 5), (5, 6)],
-                          'spine': [(10, 9), (9, 8), (8, 7), (7,0)]
+        part_pair_dict = {
+            'left hand': [(11, 12), (12, 13)],
+            'right hand': [(14, 15), (16, 17)],
+            'left leg': [(1, 2), (2, 3)],
+            'right leg': [(4, 5), (5, 6)],
+            'spine': [(10, 9), (9, 8), (8, 7), (7,0)],
+            'shoulder': [(8, 11), (8, 14)],
+            'pelvis': [(0, 1), (0, 4)]
                     }
 
         vec = [_vec(matrix, i, j) for (i, j) in pair] # shape of one element: batch x 1 x 3
@@ -275,7 +278,8 @@ class DTW():
           :param raw: dict of part body vecs
         '''
         _raw = {}
-        _raw.update({key: 100 - raw[key].mean(axis=-1) / np.pi * 100 for key in raw})
+        # _raw.update({key: 100 - raw[key].mean(axis=-1) / np.pi * 100 for key in raw})
+        _raw.update({key: (1 - raw[key].mean(axis = -1) / np.pi)**(1.5) * 100 for key in raw})
         return _raw
 
 
