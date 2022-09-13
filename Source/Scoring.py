@@ -5,31 +5,12 @@ import json
 from tqdm import tqdm 
 from collections import defaultdict
 
-class DTW():
+class scoring():
     def __init__(self, method = 'cosin'):
         assert method in ['cosin', 'L1']
         self.method = method
         self.cost_func = lambda x, y: self.cosin(x, y) \
               if self.method == 'cosin' else np.abs(x - y)
-
-
-    def cosin(self, x, y):
-        '''
-        This funtion calculate angle between two vector
-        d: [x, y, z]
-        n, m: time series (or number of states)
-          :param x: d x n
-          :param y: d x m
-
-          :return: cost matrix with shape n x m
-        '''
-        xx = (x**2).sum(axis = 0).reshape(1, -1) # shape 1 x n
-        yy = (y**2).sum(axis = 0).reshape(1, -1) # shape 1 x m
-        xy = (xx.T * yy)**0.5 # shape n x m 
-        cos = x.T.dot(y) / xy
-        assert cos.all() <= 1 and cos.all() >= -1
-        return np.arccos(cos)  
-    
 
     def dtw(self, x, y):
         '''
@@ -102,36 +83,22 @@ class DTW():
         return _P, _V
 
 
-    def allignment(self, keypoint_batch):
+    def cosin(self, x, y):
         '''
-        batch: number of states (or timeseries)
-        17: num of keypoints for each pose
-        3: [x, y, z]
-          :param keypoint_batch, batch x 17 x 3
+        This funtion calculate angle between two vector
+        d: [x, y, z]
+        n, m: time series (or number of states)
+          :param x: d x n
+          :param y: d x m
+
+          :return: cost matrix with shape n x m
         '''
-        def proj(keypoints, projection = 'XOY'):
-            '''
-            This function will translation all points to new coordinate system
-            17 keyspoints x [x, y, z]
-
-              :param vetor, shape 17 x 3
-              :param projection: projection space
-            '''
-            transformation_matrix = np.eye(3) # shape 3 x 3
-            A, B, C = keypoints[9], keypoints[1], keypoints[4] # each has shape [3, ]
-            AB, AC = A - B, A - C
-            xAB, yAB = AB[0], AB[1]
-            xAC, yAC = AC[0], AC[1]
-            idx, idy = (0, 1, 0, 1), (0, 0, 1, 1)
-            transformation_matrix[idx, idy] = xAB, yAB, xAC, yAC # Ox => BA, Oy => AC
-            new_matrix = transformation_matrix.dot(keypoints.T) # shape 3 x 17
-            return new_matrix.T # 17 x 3
-
-        b, nums, depth = keypoint_batch.shape
-        new_batch = np.empty(shape = (b, nums, depth))
-        for i in range(b):
-            new_batch[i] = proj(keypoint_batch[i])
-        return new_batch
+        xx = (x**2).sum(axis = 0).reshape(1, -1) # shape 1 x n
+        yy = (y**2).sum(axis = 0).reshape(1, -1) # shape 1 x m
+        xy = (xx.T * yy)**0.5 # shape n x m 
+        cos = x.T.dot(y) / xy
+        assert cos.all() <= 1 and cos.all() >= -1
+        return np.arccos(cos)  
 
 
     def euler_rotation(self, in_matrix, angle, axis = 'Z', is_radian = False):
@@ -193,7 +160,7 @@ class DTW():
         return vec, part_vec
 
 
-    def compare_1_1(self, gt, pred, allignment = 'rotate'):
+    def compare_1_1(self, gt, pred):
         '''
         Compare each state
         num_states: number of states used
@@ -201,7 +168,6 @@ class DTW():
         3: [x, y, z]
           :param gt: 1 x 17 x 3
           :param pred: 1 x 17 x 3
-          :param type: ['rotate', 'allign']
 
           :return points between each state
         '''
@@ -211,107 +177,63 @@ class DTW():
                 batch of pred {pred.shape[0]}')
 
         b = gt.shape[0]
-        if allignment == 'rotate': 
-            pa = {}
-            _gt, _gt_dict = self.point_to_vec(gt) # shape num_states x 16 x 3
-            for key in _gt_dict: 
-                pb = []  
-                for j in range(b):
-                    _min = None
-                    for i in range(360):
-                        _pred = self.euler_rotation(pred[j], i)
-                        _pred, _pred_dict = self.point_to_vec(_pred[np.newaxis, ...]) # shape 1 x 16 x 3   
-                                                                                      # dict 5 parts 1 x num_vecs x 3  
-                        GT = _gt_dict[key][j] # num_vecs x 3 
-                        PRED = _pred_dict[key][0] # num_vecs x 3
-                        mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
-                        cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (num_vecs, )
-                        tmp = np.mean(np.arccos(cos))
-                        if _min is None:
-                            _min, argmin = tmp, i
-                            argcos = np.arccos(cos)
-                        else:
-                            if tmp < _min:
-                                _min, argmin = tmp, i
-                                argcos = np.arccos(cos)
-                    pb.append(argcos)           
-                pa[key] = np.array(pb) # (num_vecs, )
-            return pa
-
-        elif allignment == 'allign':
-            _gt, _gt_dict = self.point_to_vec(self.allignment(gt))
-            _pred, _pred_dict = self.point_to_vec(self.allignment(pred)) # shape batch x 16 x 3
-                                                                         # dict{5 part: b x num_vecs x 3}
-            pb = defaultdict(int)
-            for key in _pred_dict:
-                for j in range(b):
-                    GT = _gt_dict[key][j]
-                    PRED = _pred_dict[key][j] # num_vecs x 3
+        pa = {}
+        _gt, _gt_dict = self.point_to_vec(gt) # shape num_states x 16 x 3
+        for key in _gt_dict: 
+            pb = []  
+            for j in range(b):
+                _min = None
+                for i in range(360):
+                    _pred = self.euler_rotation(pred[j], i)
+                    _pred, _pred_dict = self.point_to_vec(_pred[np.newaxis, ...]) # shape 1 x 16 x 3   
+                                                                                  # dict 5 parts 1 x num_vecs x 3  
+                    GT = _gt_dict[key][j] # num_vecs x 3 
+                    PRED = _pred_dict[key][0] # num_vecs x 3
                     mul = (GT**2).sum(axis = 1) * (PRED**2).sum(axis = 1)
                     cos = (GT*PRED).sum(axis = 1) / mul**0.5 # shape = (num_vecs, )
-                    if isinstance(pb[key], np.ndarray):
-                        pb[key] = np.concatenate([(np.arccos(cos)).reshape(1, -1), pb[key]], axis = 0) # b x num_vecs
+                    tmp = np.mean(np.arccos(cos))
+                    if _min is None:
+                        _min, argmin = tmp, i
+                        argcos = np.arccos(cos)
                     else:
-                        pb[key] = np.arccos(cos)[np.newaxis, ...] # 1 x num_vecs
-            return pb
+                        if tmp < _min:
+                            _min, argmin = tmp, i
+                            argcos = np.arccos(cos)
+                pb.append(argcos)           
+            pa[key] = np.array(pb) # (num_vecs, )
+        return pa
 
-
-    def compare_DTW(self, gt, pred, allignment = 'allign', path_reduce = 'mean'):
-        '''
-        Compare two time series
-        n, m: time series
-        num_states: 17
-        3: [x, y, z]
-          :param gt, n x num_joints x 3
-          :param pred, m x num_joints x 3
-          :param allignmen
-        '''
-        if allignment == 'rotate':
-            _dtw = {}
-            _min = None
-            _lambda = lambda x, y: self.optimal_path(self.dtw(x, y))[1]
-
-            _gt_vecs, _gt_parts = self.point_to_vec(gt)
-            for i in range(360):
-                _pred = np.empty(pred.shape)
-                for j in range(pred.shape[0]):
-                    _pred[j] = self.euler_rotation(pred[j], i)
-                
-                _pred_vecs, _pred_parts = self.point_to_vec(_pred)
-                dtw_matrix = self.dtw(_gt_vecs.transpose(1, 2, 0), _pred_vecs.transpose(1, 2, 0))
-                _, value = self.optimal_path(dtw_matrix)
-                point = list(map(lambda x: x[-1], value))
-                point = np.array(point).mean()
-
-                if _min is None or _min > point:
-                    _min = point
-                    _dtw.update({key:list(map(lambda x: (x[-1], x.shape[0]), 
-                                              _lambda(_gt_parts[key].transpose(1, 2, 0), 
-                                                      _pred_parts[key].transpose(1, 2, 0)))) for key in _gt_parts.keys()
-                                })
-            return _dtw
-
-
-        elif allignment == 'allign':
-            _gt = (self.point_to_vec(self.allignment(gt))).transpose(1, 0, 2)
-            _pred = (self.point_to_vec(self.allignment(pred))).transpose(1, 0, 2)
-
-            cum_mat = self.dtw(_gt, _pred) # shape num_joints x n x m
-            _, optim_points = self.optimal_path(cum_mat) # num_joints x (path of each num_joints: this may be 
-                                                         # different between each joint vec)
-                                                        
-            if path_reduce == 'mean':
-                _path_point = np.array(list(map(lambda x: x.mean(), optim_points)))
-            return _path_point
-
+    def compare_dtw(self, gt, pred):
+        _dtw = {}
+        _min = None
+        _gt_vecs, _gt_parts = self.point_to_vec(gt)
+        for i in range(360):
+            _pred = np.empty(pred.shape)
+            for j in range(pred.shape[0]):
+                _pred[j] = self.euler_rotation(pred[j], i)
             
+            _pred_vecs, _pred_parts = self.point_to_vec(_pred)
+            dtw_matrix = self.dtw(_gt_vecs.transpose(1, 2, 0), _pred_vecs.transpose(1, 2, 0))
+            _, value = self.optimal_path(dtw_matrix)
+            point = list(map(lambda x: x[-1], value))
+            point = np.array(point).mean()
+
+            if _min is None or _min > point:
+                _min = point
+                _lambda = lambda x, y: self.optimal_path(self.dtw(x, y))[1]
+                _dtw.update({key:list(map(lambda x: (x[-1], x.shape[0]), 
+                                          _lambda(_gt_parts[key].transpose(1, 2, 0), # shape 16 x 3 x num_vecs
+                                                  _pred_parts[key].transpose(1, 2, 0)))) for key in _gt_parts.keys()
+                            })
+        return _dtw
+
     def scoring(self, raw):
         '''
           :param raw: dict of part body vecs
         '''
         _raw = {}
         # _raw.update({key: 100 - raw[key].mean(axis=-1) / np.pi * 100 for key in raw})
-        _raw.update({key: (1 - raw[key] / np.pi)**(2) * 100 for key in raw})
+        _raw.update({key: (1 - raw[key] / np.pi)**(1.5) * 100 for key in raw})
         return _raw
 
 
@@ -327,17 +249,14 @@ class DTW():
             :param allignment
             :param reduction
           '''
-          assert _type in ['series', '1v1']
-          assert allignment in ['rotate', 'allign']
           assert reduction in [None, 'mean']
-
           if _type == '1v1':
-              raw = self.compare_1_1(gt, pred, allignment)
+              raw = self.compare_1_1(gt, pred)
           elif _type == 'series':
               raw = self.compare_DTW(gt, pred, allignment)
-              raw.update({ key: np.array(list(map(lambda x: x[0]/x[1], raw[key]))) for key in raw})
+              raw.update({ key: np.array(list(map(lambda x: x[0]/x[1], raw[key]))) for key in raw})             
 
           # if reduction == 'mean':
           #     raw = raw.mean(axis = 1)
                   
-          return self.scoring(raw)
+          return self.scoring(raw), raw
