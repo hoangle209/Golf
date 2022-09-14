@@ -97,7 +97,9 @@ class scoring():
         yy = (y**2).sum(axis = 0).reshape(1, -1) # shape 1 x m
         xy = (xx.T * yy)**0.5 # shape n x m 
         cos = x.T.dot(y) / xy
-        assert cos.all() <= 1 and cos.all() >= -1
+        cos[cos > 1] = 1.
+        cos[cos < -1] = -1.
+        assert np.all(cos <= 1.0) and np.all(cos >= -1.0)
         return np.arccos(cos)  
 
 
@@ -206,6 +208,8 @@ class scoring():
     def compare_dtw(self, gt, pred):
         _dtw = {}
         _min = None
+        _lambda = lambda x, y: self.optimal_path(self.dtw(x, y))[1]
+
         _gt_vecs, _gt_parts = self.point_to_vec(gt)
         for i in range(360):
             _pred = np.empty(pred.shape)
@@ -220,9 +224,8 @@ class scoring():
 
             if _min is None or _min > point:
                 _min = point
-                _lambda = lambda x, y: self.optimal_path(self.dtw(x, y))[1]
                 _dtw.update({key:list(map(lambda x: (x[-1], x.shape[0]), 
-                                          _lambda(_gt_parts[key].transpose(1, 2, 0), # shape 16 x 3 x num_vecs
+                                          _lambda(_gt_parts[key].transpose(1, 2, 0), 
                                                   _pred_parts[key].transpose(1, 2, 0)))) for key in _gt_parts.keys()
                             })
         return _dtw
@@ -237,7 +240,7 @@ class scoring():
         return _raw
 
 
-    def __call__(self, gt, pred, _type = '1v1', allignment = 'allign', reduction = 'mean'):
+    def __call__(self, gt, pred, _type = '1v1', reduction = 'mean'):
           '''
           Run
           batch: time series for 'series' or nums of states for '1v1'
@@ -253,10 +256,10 @@ class scoring():
           if _type == '1v1':
               raw = self.compare_1_1(gt, pred)
           elif _type == 'series':
-              raw = self.compare_DTW(gt, pred, allignment)
-              raw.update({ key: np.array(list(map(lambda x: x[0]/x[1], raw[key]))) for key in raw})             
+              raw = self.compare_dtw(gt, pred)
+              raw.update({ key: np.array(list(map(lambda x: (x[0]/x[1]), raw[key]))) for key in raw})             
 
           # if reduction == 'mean':
           #     raw = raw.mean(axis = 1)
                   
-          return self.scoring(raw), raw
+          return self.scoring(raw)
